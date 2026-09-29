@@ -182,27 +182,25 @@ export async function request<T>(
 
 /** Checks the data-plane endpoint: HTTPS, or HTTP on loopback; no credentials in it. */
 export function checkEndpoint(raw: string): string {
-  let url: URL;
+  let url: URL | undefined;
   try {
     url = new URL(raw);
-  } catch {
-    throw invalidEndpoint();
-  }
-  const loopback = ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
+  } catch {}
   if (
-    !url.host ||
+    !url?.host ||
     url.username ||
     url.password ||
     url.search ||
     url.hash ||
-    !(url.protocol === "https:" || (url.protocol === "http:" && loopback))
+    !(
+      url.protocol === "https:" ||
+      (url.protocol === "http:" &&
+        ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname))
+    )
   )
-    throw invalidEndpoint();
+    throw new RunnerQError(
+      "configuration",
+      "provide an HTTPS data-plane endpoint (HTTP is allowed on loopback)",
+    );
   return url.toString().replace(/\/+$/, "");
-}
-function invalidEndpoint(): RunnerQError {
-  return new RunnerQError(
-    "configuration",
-    "provide an HTTPS data-plane endpoint (HTTP is allowed on loopback)",
-  );
 }

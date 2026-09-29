@@ -45,6 +45,7 @@ const encodings = ["json-v1", "superjson-v1"];
 /** How long waitForWork long-polls the data plane (it caps a poll at 25s). */
 const defaultWaitMs = 20_000;
 const nanos = 1_000_000;
+const priorities = ["low", "normal", "high", "critical"];
 
 /**
  * RunnerQ Cloud's hosted storage for the TypeScript SDK. Every storage call goes to the
@@ -107,7 +108,7 @@ export class CloudStorage implements Storage, ExecutorObserver {
       ID: a.id,
       ActivityType: a.type,
       Payload: a.payload,
-      Priority: ["low", "normal", "high", "critical"].indexOf(o.priority) + 1,
+      Priority: priorities.indexOf(o.priority) + 1,
       MaxRetries: o.maxAttempts === "unlimited" ? 0 : o.maxAttempts,
       RetryCount: 0,
       TimeoutSeconds: Math.ceil(o.timeoutMs / 1000),
@@ -116,7 +117,7 @@ export class CloudStorage implements Storage, ExecutorObserver {
       MaxRetryDelaySeconds: Math.ceil(o.maxRetryDelayMs / 1000),
       ScheduledAt:
         o.delayMs > 0 ? new Date(Date.now() + o.delayMs).toISOString() : null,
-      Metadata: { ...o.metadata },
+      Metadata: o.metadata,
       IdempotencyKey: a.key
         ? {
             Key: a.key,
@@ -161,20 +162,14 @@ export class CloudStorage implements Storage, ExecutorObserver {
       else await this.call("Enqueue", { activity });
       return a.id;
     } catch (error) {
-      // Caller-generated ids reconcile a lost reply: a retry finds the activity it made.
-      if (await this.exists(a.id)) return a.id;
+      // The write may have committed and lost its reply: the caller-generated id finds it.
+      // Any failure to look counts as not stored, so submit throws its own error.
+      const stored = await this.call("GetActivity", { activityID: a.id }).catch(
+        () => null,
+      );
+      if (stored) return a.id;
       throw error;
     }
-  }
-  /**
-   * Whether the activity is stored, to reconcile a lost reply. Any failure (not found, or
-   * the data plane still unreachable) counts as no, so submit throws its own error.
-   */
-  private exists(id: string): Promise<boolean> {
-    return this.call("GetActivity", { activityID: id }).then(
-      (activity) => !!activity,
-      () => false,
-    );
   }
 
   async claim(
