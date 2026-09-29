@@ -1,0 +1,36 @@
+{
+  "name": "@runnerq/cloud-storage",
+  "version": "0.1.0",
+  "description": "RunnerQ Cloud hosted storage for the RunnerQ TypeScript SDK",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "src",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "npm run build && node --test test/*.test.mjs",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "prepare": "npm run build"
+  },
+  "peerDependencies": {
+    "runnerq": ">=0.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "prettier": "^3.9.9",
+    "runnerq": "github:runnerq/runnerq-ts#chore/prepare-on-git-install",
+    "typescript": "^5.9.3"
+  }
+}
