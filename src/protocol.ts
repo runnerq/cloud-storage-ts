@@ -2,9 +2,9 @@
 // operation, whose arguments and results are runnerq-go's storage types in Go's JSON.
 import { RunnerQError } from "runnerq";
 
-export const protocolVersion = "1";
+const protocolVersion = "1";
 /** storaged bounds a normal request at 30s and a long poll at 25s; allow for the network. */
-export const callTimeoutMs = 35_000;
+const callTimeoutMs = 35_000;
 const maxResponseBytes = 16 << 20;
 
 /** runnerq-go's storage.QueuedActivity. */

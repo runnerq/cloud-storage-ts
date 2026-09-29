@@ -166,12 +166,15 @@ export class CloudStorage implements Storage, ExecutorObserver {
       throw error;
     }
   }
-  private async exists(id: string): Promise<boolean> {
-    try {
-      return !!(await this.call("GetActivity", { activityID: id }));
-    } catch {
-      return false;
-    }
+  /**
+   * Whether the activity is stored, to reconcile a lost reply. Any failure (not found, or
+   * the data plane still unreachable) counts as no, so submit throws its own error.
+   */
+  private exists(id: string): Promise<boolean> {
+    return this.call("GetActivity", { activityID: id }).then(
+      (activity) => !!activity,
+      () => false,
+    );
   }
 
   async claim(
