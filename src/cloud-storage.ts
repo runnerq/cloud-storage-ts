@@ -48,10 +48,8 @@ const nanos = 1_000_000;
 const priorities = ["low", "normal", "high", "critical"];
 
 /**
- * RunnerQ Cloud's hosted storage for the TypeScript SDK. Every storage call goes to the
- * data plane over HTTPS with the store key; scheduling, lease recovery and retention run
- * there, not in the worker. A worker built on it also reports itself to the Cloud (every
- * 10 seconds and soon after it changes), so Fleet shows it without an agent.
+ * RunnerQ Cloud's hosted storage: every call goes to the data plane, which also runs
+ * scheduling, lease recovery and retention. Workers on it report themselves to Fleet.
  */
 export class CloudStorage implements Storage, ExecutorObserver {
   readonly queue: string;
@@ -212,10 +210,7 @@ export class CloudStorage implements Storage, ExecutorObserver {
     return (claims ?? []).map(toClaim);
   }
 
-  /**
-   * Long-polls the data plane for the next claim, so new work starts at once rather than
-   * at the next poll. What it claims is handed out by the next `claim()`.
-   */
+  /** Long-polls for the next claim, so work starts at once; the next `claim()` takes it. */
   async waitForWork(
     signal: AbortSignal,
     timeoutMs = defaultWaitMs,
@@ -408,8 +403,8 @@ export class CloudStorage implements Storage, ExecutorObserver {
   }
 
   /**
-   * Stops reporting, sends one last report (the loop's latest may be a heartbeat old, and
-   * Fleet keeps what a stopped worker last said), then says goodbye.
+   * Stops reporting, sends a final report (the loop's may be a heartbeat old, and Fleet
+   * keeps what a stopped worker last said), then says goodbye.
    */
   async executorStopped(id: string): Promise<void> {
     const reporter = this.reporters.get(id);
@@ -428,13 +423,13 @@ export class CloudStorage implements Storage, ExecutorObserver {
     );
   }
 
-  private async executorCall(
+  private executorCall(
     method: "PUT" | "DELETE",
     id: string,
     body?: unknown,
     signal?: AbortSignal,
   ): Promise<void> {
-    await request(
+    return request(
       this.t,
       method,
       `/v1/executors/${encodeURIComponent(id)}`,

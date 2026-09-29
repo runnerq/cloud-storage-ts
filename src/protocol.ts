@@ -83,10 +83,9 @@ export interface Transport {
 }
 
 /**
- * Sends one request and decodes storaged's envelope. A symbolic error code wins over the
- * HTTP status; anything unreadable is `unavailable` (the outcome may be unknown, and the
- * worker retries idempotent calls). Redirects are never followed: they would forward the
- * key or replay a write.
+ * Sends one request and decodes the envelope. An error code wins over the HTTP status;
+ * anything unreadable is `unavailable` (the write may have committed). Redirects are
+ * never followed: they would forward the key or replay a write.
  */
 export async function request<T>(
   t: Transport,
@@ -97,8 +96,7 @@ export async function request<T>(
   timeoutMs = callTimeoutMs,
 ): Promise<T> {
   signal?.throwIfAborted();
-  // A cleared timer rather than AbortSignal.timeout/any, which keep every call's signals
-  // and timer alive until the deadline passes.
+  // Not AbortSignal.timeout/any: they keep each call's signals and timer alive until the deadline.
   const abort = new AbortController();
   const timer = setTimeout(
     () =>

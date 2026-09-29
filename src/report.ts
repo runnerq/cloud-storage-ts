@@ -2,14 +2,10 @@ import type { ExecutorSnapshot } from "runnerq";
 
 /** How often a worker reports; the data plane counts a worker gone after three missed. */
 export const heartbeatIntervalMs = 10_000;
-/** The least time between the extra reports changes trigger. */
+/** The least time between the extra reports that changes trigger. */
 export const minReportGapMs = 2_000;
 
-/**
- * A worker's report to the data plane (PUT /v1/executors/{id}): what a conductor agent
- * says about its executor, in the same shapes (the hello's sdk and executor, and the
- * executor.report state with the running list).
- */
+/** A worker's report (PUT /v1/executors/{id}), in a conductor agent's shapes. */
 export function reportOf(snap: ExecutorSnapshot) {
   const { info, state, counters: c } = snap;
   const started = info.startedAt;
