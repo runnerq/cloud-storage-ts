@@ -60,6 +60,36 @@ function submission(extra = {}) {
   };
 }
 
+// dequeued is a claim as storaged returns it: runnerq-go's DequeuedActivity in
+// Go's JSON, with `activity` and `claim` overriding its fields.
+function dequeued(id, activity = {}, claim = {}) {
+  return {
+    Activity: {
+      ID: id,
+      ActivityType: "charge",
+      Payload: 1,
+      Priority: 2,
+      MaxRetries: 0,
+      RetryCount: 0,
+      TimeoutSeconds: 30,
+      RetryDelaySeconds: 1,
+      MaxRetryDelaySeconds: 0,
+      ScheduledAt: null,
+      Metadata: null,
+      IdempotencyKey: null,
+      CreatedAt: "2026-09-29T12:00:00Z",
+      ParentActivityID: null,
+      RootActivityID: id,
+      Depth: 0,
+      ...activity,
+    },
+    LeaseID: "t",
+    Attempt: 1,
+    LeaseDeadline: "2026-09-29T12:01:00Z",
+    ...claim,
+  };
+}
+
 test("configuration is checked", () => {
   const ok = { apiKey: "rqh_x", endpoint: "https://data.example.com" };
   assert.equal(new CloudStorage(ok).queue, "default");
@@ -85,30 +115,17 @@ test("calls carry the key, the version and Go-shaped arguments", async (t) => {
       case "DequeueBatchEncoded":
         return {
           result: [
-            {
-              Activity: {
-                ID: "a1",
-                ActivityType: "charge",
+            dequeued(
+              "a1",
+              {
                 Payload: { json: { n: 1 }, meta: {} },
-                Priority: 3,
-                MaxRetries: 5,
                 RetryCount: 1,
-                TimeoutSeconds: 30,
-                RetryDelaySeconds: 1,
-                MaxRetryDelaySeconds: 60,
                 ScheduledAt: "2026-09-29T11:59:00Z",
                 Metadata: { source: "test" },
-                IdempotencyKey: null,
-                CreatedAt: "2026-09-29T11:00:00Z",
-                ParentActivityID: null,
-                RootActivityID: "a1",
-                Depth: 0,
                 Serialization: "superjson-v1",
               },
-              LeaseID: "w:batch:x:a1",
-              Attempt: 2,
-              LeaseDeadline: "2026-09-29T12:01:00Z",
-            },
+              { LeaseID: "w:batch:x:a1" },
+            ),
           ],
         };
       case "AckFailure":
@@ -404,31 +421,7 @@ test("waitForWork long-polls and the next claim takes what it found", async (t) 
     if (c.body.timeout === 0) return { result: [] };
     await new Promise((r) => setTimeout(r, 50));
     return {
-      result: [
-        {
-          Activity: {
-            ID: "late",
-            ActivityType: "charge",
-            Payload: 1,
-            Priority: 2,
-            MaxRetries: 0,
-            RetryCount: 0,
-            TimeoutSeconds: 30,
-            RetryDelaySeconds: 1,
-            MaxRetryDelaySeconds: 0,
-            ScheduledAt: null,
-            Metadata: null,
-            IdempotencyKey: null,
-            CreatedAt: "2026-09-29T12:00:00Z",
-            ParentActivityID: null,
-            RootActivityID: "late",
-            Depth: 0,
-          },
-          LeaseID: "t",
-          Attempt: 1,
-          LeaseDeadline: "2026-09-29T12:01:00Z",
-        },
-      ],
+      result: [dequeued("late")],
     };
   });
   const s = new CloudStorage({ apiKey: "k", endpoint: data.url });
