@@ -58,7 +58,7 @@ export class CloudStorage implements Storage, ExecutorObserver {
   private readonly path: string;
   private readonly reporters = new Map<
     string,
-    { stop: AbortController; done: Promise<void> }
+    { stop: AbortController; done: Promise<void>; source: ExecutorSource }
   >();
   /** The last claim's shape, so waitForWork can long-poll for the next one. */
   private lastClaim?: {
@@ -396,49 +396,60 @@ export class CloudStorage implements Storage, ExecutorObserver {
       source,
       intervalMs: () => heartbeatIntervalMs,
       minGapMs: minReportGapMs,
-      send: async () => {
-        try {
-          await request(
-            this.t,
-            "PUT",
-            `/v1/executors/${encodeURIComponent(id)}`,
-            reportOf(source.snapshot()),
-            stop.signal,
-            10_000,
-          );
-        } catch (error) {
+      send: () =>
+        this.executorCall(
+          "PUT",
+          id,
+          reportOf(source.snapshot()),
+          stop.signal,
+        ).catch((error) => {
           if (!stop.signal.aborted)
-            console.warn(
-              `runnerq-cloud-storage: executor report failed; retrying: ${(error as Error).message}`,
-            );
-        }
-      },
+            warn("executor report failed; retrying", error);
+        }),
     });
-    this.reporters.set(id, { stop, done });
+    this.reporters.set(id, { stop, done, source });
   }
 
+  /**
+   * Stops reporting, sends one last report (the loop's latest may be a heartbeat old, and
+   * Fleet keeps what a stopped worker last said), then says goodbye.
+   */
   async executorStopped(id: string): Promise<void> {
     const reporter = this.reporters.get(id);
     this.reporters.delete(id);
     if (reporter) {
       reporter.stop.abort();
       await reporter.done;
+      await this.executorCall(
+        "PUT",
+        id,
+        reportOf(reporter.source.snapshot()),
+      ).catch((error) => warn("final executor report failed", error));
     }
-    try {
-      await request(
-        this.t,
-        "DELETE",
-        `/v1/executors/${encodeURIComponent(id)}`,
-        undefined,
-        undefined,
-        5_000,
-      );
-    } catch (error) {
-      console.warn(
-        `runnerq-cloud-storage: executor goodbye failed: ${(error as Error).message}`,
-      );
-    }
+    await this.executorCall("DELETE", id).catch((error) =>
+      warn("executor goodbye failed", error),
+    );
   }
+
+  private executorCall(
+    method: "PUT" | "DELETE",
+    id: string,
+    body?: unknown,
+    signal?: AbortSignal,
+  ): Promise<unknown> {
+    return request(
+      this.t,
+      method,
+      `/v1/executors/${encodeURIComponent(id)}`,
+      body,
+      signal,
+      5_000,
+    );
+  }
+}
+
+function warn(what: string, error: unknown): void {
+  console.warn(`runnerq-cloud-storage: ${what}: ${(error as Error).message}`);
 }
 
 function toClaim(d: DequeuedActivity): Claim {

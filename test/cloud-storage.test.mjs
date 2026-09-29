@@ -528,7 +528,8 @@ test("a worker's executor is reported and says goodbye", async (t) => {
   );
 
   await s.executorStopped("exec-1");
-  const last = data.calls.at(-1);
+  const [final, last] = data.calls.slice(-2);
+  assert.deepEqual([final.method, final.body.state.id], ["PUT", "exec-1"]);
   assert.deepEqual(
     [last.method, last.path],
     ["DELETE", "/v1/executors/exec-1"],
