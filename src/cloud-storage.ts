@@ -184,17 +184,16 @@ export class CloudStorage implements Storage, ExecutorObserver {
     executorId?: string,
   ): Promise<Claim[]> {
     if (!types.length || limit < 1) return [];
-    this.lastClaim = { limit, types: [...types], executorId };
-    const stashed = this.takeStash(limit, types);
-    if (stashed.length) return stashed;
+    this.lastClaim = { limit, types, executorId };
+    if (this.stash.length) {
+      const taken: Claim[] = [];
+      const kept: Claim[] = [];
+      for (const c of this.stash)
+        (taken.length < limit && types.includes(c.type) ? taken : kept).push(c);
+      this.stash = kept;
+      if (taken.length) return taken;
+    }
     return this.dequeue(limit, types, executorId, 0);
-  }
-  private takeStash(limit: number, types: readonly string[]): Claim[] {
-    const taken = this.stash
-      .filter((c) => types.includes(c.type))
-      .slice(0, limit);
-    this.stash = this.stash.filter((c) => !taken.includes(c));
-    return taken;
   }
   private async dequeue(
     limit: number,
