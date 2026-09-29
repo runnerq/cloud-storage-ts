@@ -96,69 +96,88 @@ export async function request<T>(
   signal?: AbortSignal,
   timeoutMs = callTimeoutMs,
 ): Promise<T> {
-  const deadline = AbortSignal.timeout(timeoutMs);
-  const abort = signal ? AbortSignal.any([signal, deadline]) : deadline;
-  let res: Response;
+  signal?.throwIfAborted();
+  // A cleared timer rather than AbortSignal.timeout/any, which keep every call's signals
+  // and timer alive until the deadline passes.
+  const abort = new AbortController();
+  const timer = setTimeout(
+    () =>
+      abort.abort(
+        new DOMException(
+          "The operation was aborted due to timeout",
+          "TimeoutError",
+        ),
+      ),
+    timeoutMs,
+  ).unref();
+  const cancel = () => abort.abort(signal!.reason);
+  signal?.addEventListener("abort", cancel);
   try {
-    res = await t.fetch(t.endpoint + path, {
-      method,
-      redirect: "manual",
-      signal: abort,
-      headers: {
-        Authorization: `Bearer ${t.apiKey}`,
-        "Content-Type": "application/json",
-        "RunnerQ-Storage-Version": protocolVersion,
-      },
-      body: body === undefined ? undefined : JSON.stringify(body),
-    });
-  } catch (cause) {
-    if (signal?.aborted) throw signal.reason ?? cause;
-    throw new RunnerQError(
-      deadline.aborted ? "timeout" : "unavailable",
-      "storage transport failed; outcome may be unknown",
-      { cause },
-    );
+    let res: Response;
+    try {
+      res = await t.fetch(t.endpoint + path, {
+        method,
+        redirect: "manual",
+        signal: abort.signal,
+        headers: {
+          Authorization: `Bearer ${t.apiKey}`,
+          "Content-Type": "application/json",
+          "RunnerQ-Storage-Version": protocolVersion,
+        },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      });
+    } catch (cause) {
+      if (signal?.aborted) throw signal.reason ?? cause;
+      throw new RunnerQError(
+        abort.signal.aborted ? "timeout" : "unavailable",
+        "storage transport failed; outcome may be unknown",
+        { cause },
+      );
+    }
+    let text: string;
+    try {
+      text = await res.text();
+    } catch (cause) {
+      if (signal?.aborted) throw signal.reason ?? cause;
+      throw new RunnerQError(
+        "unavailable",
+        "incomplete storage response; outcome may be unknown",
+        { cause },
+      );
+    }
+    if (text.length > maxResponseBytes)
+      throw new RunnerQError("unavailable", "storage response too large");
+    let envelope: {
+      result?: unknown;
+      error?: { code: string; message: string; field?: string };
+    };
+    try {
+      envelope = text ? JSON.parse(text) : {};
+    } catch (cause) {
+      throw new RunnerQError(
+        "unavailable",
+        `invalid storage response (${res.status}); outcome may be unknown`,
+        { cause },
+      );
+    }
+    if (envelope.error) {
+      const e = envelope.error;
+      const message = e.field ? `${e.message} (${e.field})` : e.message;
+      throw new RunnerQError(codes[e.code] ?? "configuration", message);
+    }
+    if (
+      res.status !== 200 ||
+      res.headers.get("RunnerQ-Storage-Version") !== protocolVersion
+    )
+      throw new RunnerQError(
+        "unavailable",
+        `unexpected storage response (${res.status})`,
+      );
+    return envelope.result as T;
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener("abort", cancel);
   }
-  let text: string;
-  try {
-    text = await res.text();
-  } catch (cause) {
-    if (signal?.aborted) throw signal.reason ?? cause;
-    throw new RunnerQError(
-      "unavailable",
-      "incomplete storage response; outcome may be unknown",
-      { cause },
-    );
-  }
-  if (text.length > maxResponseBytes)
-    throw new RunnerQError("unavailable", "storage response too large");
-  let envelope: {
-    result?: unknown;
-    error?: { code: string; message: string; field?: string };
-  };
-  try {
-    envelope = text ? JSON.parse(text) : {};
-  } catch (cause) {
-    throw new RunnerQError(
-      "unavailable",
-      `invalid storage response (${res.status}); outcome may be unknown`,
-      { cause },
-    );
-  }
-  if (envelope.error) {
-    const e = envelope.error;
-    const message = e.field ? `${e.message} (${e.field})` : e.message;
-    throw new RunnerQError(codes[e.code] ?? "configuration", message);
-  }
-  if (
-    res.status !== 200 ||
-    res.headers.get("RunnerQ-Storage-Version") !== protocolVersion
-  )
-    throw new RunnerQError(
-      "unavailable",
-      `unexpected storage response (${res.status})`,
-    );
-  return envelope.result as T;
 }
 
 /** Checks the data-plane endpoint: HTTPS, or HTTP on loopback; no credentials in it. */
