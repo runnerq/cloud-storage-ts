@@ -431,13 +431,13 @@ export class CloudStorage implements Storage, ExecutorObserver {
     );
   }
 
-  private executorCall(
+  private async executorCall(
     method: "PUT" | "DELETE",
     id: string,
     body?: unknown,
     signal?: AbortSignal,
-  ): Promise<unknown> {
-    return request(
+  ): Promise<void> {
+    await request(
       this.t,
       method,
       `/v1/executors/${encodeURIComponent(id)}`,
