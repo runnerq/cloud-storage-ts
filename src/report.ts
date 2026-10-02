@@ -1,4 +1,5 @@
 import type { ExecutorSnapshot } from "runnerq";
+import type { ExecutorReport } from "./executor-report.js";
 
 /** How often a worker reports; the data plane counts a worker gone after three missed. */
 export const heartbeatIntervalMs = 10_000;
@@ -6,7 +7,7 @@ export const heartbeatIntervalMs = 10_000;
 export const minReportGapMs = 2_000;
 
 /** A worker's report (PUT /v1/executors/{id}), in a conductor agent's shapes. */
-export function reportOf(snap: ExecutorSnapshot) {
+export function reportOf(snap: ExecutorSnapshot): ExecutorReport {
   const { info, state, counters: c } = snap;
   const started = info.startedAt;
   return {
