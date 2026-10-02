@@ -28,14 +28,12 @@ export function reportOf(snap: ExecutorSnapshot): ExecutorReport {
         : 0,
       max_concurrency: info.maxConcurrency,
       in_flight: state.running.length,
-      ...(state.running.length && {
-        running: state.running.map((a) => ({
-          activity_id: a.id,
-          type: a.type,
-          attempt: a.attempt,
-          started_at: a.startedAt.toISOString(),
-        })),
-      }),
+      running: state.running.map((a) => ({
+        activity_id: a.id,
+        type: a.type,
+        attempt: a.attempt,
+        started_at: a.startedAt.toISOString(),
+      })),
       claim_lag_ms: Math.round(c.lastClaimLagMs),
       heartbeat_failures: c.heartbeatFailures,
       draining: state.draining,

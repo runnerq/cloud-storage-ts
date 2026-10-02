@@ -59,6 +59,9 @@ export type ResultState = 0 | 1;
  */
 export type ErrorCode = "unavailable" | "conflict" | "not_found" | "internal" | "serialization" | "configuration" | "timeout" | "duplicate_activity" | "idempotency_conflict" | "claim_lost" | "checkpoint_conflict" | "invalid_argument" | "unsupported";
 
+/** Every ErrorCode. */
+export const errorCodeValues = ["unavailable", "conflict", "not_found", "internal", "serialization", "configuration", "timeout", "duplicate_activity", "idempotency_conflict", "claim_lost", "checkpoint_conflict", "invalid_argument", "unsupported"] as const;
+
 export interface ErrorBody {
   code: ErrorCode;
   message: string;
