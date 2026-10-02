@@ -24,9 +24,11 @@ import {
   type DequeuedActivity,
   type FailureKind,
   type IdempotencyResult,
+  type Operations,
   type QueuedActivity,
   type Transport,
 } from "./protocol.js";
+import type { Priority } from "./storage-protocol.js";
 import { reportOf, heartbeatIntervalMs, minReportGapMs } from "./report.js";
 
 export interface CloudStorageOptions {
@@ -84,13 +86,14 @@ export class CloudStorage implements Storage, ExecutorObserver {
     this.path = `/v1/queues/${encodeURIComponent(this.queue)}/`;
   }
 
-  private call<T>(
-    method: string,
-    args: unknown,
+  /** One storage operation; the schema types its arguments and result. */
+  private call<K extends keyof Operations & string>(
+    method: K,
+    args: Operations[K]["args"],
     signal?: AbortSignal,
     timeoutMs?: number,
-  ): Promise<T> {
-    return request<T>(
+  ): Promise<Operations[K]["result"]> {
+    return request<Operations[K]["result"]>(
       this.t,
       "POST",
       this.path + method,
@@ -106,7 +109,7 @@ export class CloudStorage implements Storage, ExecutorObserver {
       ID: a.id,
       ActivityType: a.type,
       Payload: a.payload,
-      Priority: priorities.indexOf(o.priority) + 1,
+      Priority: (priorities.indexOf(o.priority) + 1) as Priority,
       MaxRetries: o.maxAttempts === "unlimited" ? 0 : o.maxAttempts,
       RetryCount: 0,
       TimeoutSeconds: Math.ceil(o.timeoutMs / 1000),
@@ -131,15 +134,12 @@ export class CloudStorage implements Storage, ExecutorObserver {
     try {
       if (a.key) {
         const existing = a.fence
-          ? await this.call<IdempotencyResult | null>(
-              "EnqueueIdempotentForWorker",
-              {
-                a: activity,
-                ownerID: a.fence.ownerId,
-                workerID: a.fence.token,
-              },
-            )
-          : await this.call<IdempotencyResult | null>("EnqueueIdempotent", {
+          ? await this.call("EnqueueIdempotentForWorker", {
+              a: activity,
+              ownerID: a.fence.ownerId,
+              workerID: a.fence.token,
+            })
+          : await this.call("EnqueueIdempotent", {
               activity,
             });
         if (!existing) return a.id;
@@ -196,13 +196,13 @@ export class CloudStorage implements Storage, ExecutorObserver {
     signal?: AbortSignal,
   ): Promise<Claim[]> {
     const prefix = `${executorId ?? randomUUID()}:batch:${randomUUID()}`;
-    const claims = await this.call<DequeuedActivity[] | null>(
+    const claims = await this.call(
       "DequeueBatchEncoded",
       {
         workerIDPrefix: prefix,
         limit,
         timeout: timeoutMs * nanos,
-        activityTypes: types,
+        activityTypes: [...types],
         serializations: encodings,
       },
       signal,
@@ -233,7 +233,7 @@ export class CloudStorage implements Storage, ExecutorObserver {
   }
 
   async renew(f: Fence, leaseMs: number): Promise<boolean> {
-    return !!(await this.call<boolean>("ExtendLeaseForWorker", {
+    return !!(await this.call("ExtendLeaseForWorker", {
       activityID: f.ownerId,
       workerID: f.token,
       extendBy: leaseMs * nanos,
@@ -261,7 +261,7 @@ export class CloudStorage implements Storage, ExecutorObserver {
       IsTimeout: failure?.code === "timeout",
       ...(failure && { Details: failure }),
     };
-    const dead = await this.call<boolean>("AckFailure", {
+    const dead = await this.call("AckFailure", {
       activityID: f.ownerId,
       failure: kind,
       workerID: f.token,
@@ -286,9 +286,7 @@ export class CloudStorage implements Storage, ExecutorObserver {
   }
 
   async getResult(id: string): Promise<StoredResult | null> {
-    return toStoredResult(
-      await this.call<ActivityResult | null>("GetResult", { activityID: id }),
-    );
+    return toStoredResult(await this.call("GetResult", { activityID: id }));
   }
 
   async waitResult(id: string, signal?: AbortSignal): Promise<StoredResult> {
@@ -296,11 +294,7 @@ export class CloudStorage implements Storage, ExecutorObserver {
       signal?.throwIfAborted();
       try {
         const result = toStoredResult(
-          await this.call<ActivityResult | null>(
-            "WaitForResult",
-            { activityID: id },
-            signal,
-          ),
+          await this.call("WaitForResult", { activityID: id }, signal),
         );
         if (result) return result;
       } catch (error) {
@@ -355,7 +349,7 @@ export class CloudStorage implements Storage, ExecutorObserver {
   }
 
   async lookupKey(key: string): Promise<string> {
-    return this.call<string>("LookupIdempotencyActivityID", {
+    return this.call("LookupIdempotencyActivityID", {
       idempotencyKey: key,
     });
   }
@@ -454,7 +448,7 @@ function toClaim(d: DequeuedActivity): Claim {
     token: d.LeaseID,
     retryCount: a.RetryCount,
     timeoutMs: a.TimeoutSeconds * 1000,
-    parentId: a.ParentActivityID,
+    parentId: a.ParentActivityID ?? null,
     rootId: a.RootActivityID,
     depth: a.Depth,
     metadata: a.Metadata ?? {},

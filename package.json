@@ -23,6 +23,7 @@
     "test": "npm run build && node --test test/*.test.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "spec:gen": "go run -C spec ./tools/gen -part storage -lang ts -out ../src/storage-protocol.ts && go run -C spec ./tools/gen -part executor-report -lang ts -out ../src/executor-report.ts",
     "prepare": "npm run build"
   },
   "peerDependencies": {

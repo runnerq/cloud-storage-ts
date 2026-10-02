@@ -1,55 +1,21 @@
 // The RunnerQ Cloud storage protocol (v1), as storaged serves it: one POST per storage
 // operation, whose arguments and results are runnerq-go's storage types in Go's JSON.
 import { RunnerQError } from "runnerq";
+import { storageVersion, type ErrorCode } from "./storage-protocol.js";
 
-const protocolVersion = "1";
 /** storaged bounds a normal request at 30s and a long poll at 25s; allow for the network. */
 const callTimeoutMs = 35_000;
 const maxResponseBytes = 16 << 20;
 
-/** runnerq-go's storage.QueuedActivity. */
-export interface QueuedActivity {
-  ID: string;
-  ActivityType: string;
-  Payload: unknown;
-  Priority: number;
-  MaxRetries: number;
-  RetryCount: number;
-  TimeoutSeconds: number;
-  RetryDelaySeconds: number;
-  MaxRetryDelaySeconds: number;
-  ScheduledAt: string | null;
-  Metadata: Record<string, string> | null;
-  IdempotencyKey: { Key: string; Behavior: number } | null;
-  CreatedAt: string;
-  ParentActivityID: string | null;
-  RootActivityID: string;
-  Depth: number;
-  /** Absent for plain JSON. */
-  Serialization?: string;
-}
-export interface DequeuedActivity {
-  Activity: QueuedActivity;
-  LeaseID: string;
-  Attempt: number;
-  LeaseDeadline: string;
-}
-export interface ActivityResult {
-  Data: unknown;
-  /** 0 ok, 1 error. */
-  State: number;
-  Serialization?: string;
-}
-export interface IdempotencyResult {
-  ExistingID: string;
-  ExistingParentID: string | null;
-}
-export interface FailureKind {
-  Retryable: boolean;
-  Reason: string;
-  IsTimeout: boolean;
-  Details?: unknown;
-}
+// The wire types are generated from runnerq-spec's protocol/storage (npm run spec:gen).
+export type {
+  ActivityResult,
+  DequeuedActivity,
+  FailureKind,
+  IdempotencyResult,
+  Operations,
+  QueuedActivity,
+} from "./storage-protocol.js";
 
 /** runnerq-go's idempotency behaviours, by the TypeScript SDK's duplicate policies. */
 export const behavior = {
@@ -60,21 +26,22 @@ export const behavior = {
 } as const;
 
 /** The TypeScript SDK's error codes for the protocol's. */
-const codes: Record<string, ConstructorParameters<typeof RunnerQError>[0]> = {
-  unavailable: "unavailable",
-  conflict: "conflict",
-  not_found: "not_found",
-  internal: "internal",
-  serialization: "serialization",
-  configuration: "configuration",
-  timeout: "timeout",
-  duplicate_activity: "duplicate",
-  idempotency_conflict: "idempotency_conflict",
-  claim_lost: "claim_lost",
-  checkpoint_conflict: "checkpoint_conflict",
-  invalid_argument: "configuration",
-  unsupported: "configuration",
-};
+const codes: Record<ErrorCode, ConstructorParameters<typeof RunnerQError>[0]> =
+  {
+    unavailable: "unavailable",
+    conflict: "conflict",
+    not_found: "not_found",
+    internal: "internal",
+    serialization: "serialization",
+    configuration: "configuration",
+    timeout: "timeout",
+    duplicate_activity: "duplicate",
+    idempotency_conflict: "idempotency_conflict",
+    claim_lost: "claim_lost",
+    checkpoint_conflict: "checkpoint_conflict",
+    invalid_argument: "configuration",
+    unsupported: "configuration",
+  };
 
 export interface Transport {
   endpoint: string;
@@ -120,7 +87,7 @@ export async function request<T>(
         headers: {
           Authorization: `Bearer ${t.apiKey}`,
           "Content-Type": "application/json",
-          "RunnerQ-Storage-Version": protocolVersion,
+          "RunnerQ-Storage-Version": storageVersion,
         },
         body: body === undefined ? undefined : JSON.stringify(body),
       });
@@ -161,11 +128,14 @@ export async function request<T>(
     if (envelope.error) {
       const e = envelope.error;
       const message = e.field ? `${e.message} (${e.field})` : e.message;
-      throw new RunnerQError(codes[e.code] ?? "configuration", message);
+      throw new RunnerQError(
+        codes[e.code as ErrorCode] ?? "configuration",
+        message,
+      );
     }
     if (
       res.status !== 200 ||
-      res.headers.get("RunnerQ-Storage-Version") !== protocolVersion
+      res.headers.get("RunnerQ-Storage-Version") !== storageVersion
     )
       throw new RunnerQError(
         "unavailable",

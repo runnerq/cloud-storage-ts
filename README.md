@@ -48,9 +48,15 @@ This needs a data plane that serves the encoded storage operations
 ## Development
 
 ```sh
+git submodule update --init   # runnerq-spec, at spec/
 npm install
 npm test
+npm run spec:gen              # after bumping spec (needs Go)
 ```
+
+The storage protocol's types (`src/storage-protocol.ts`, `src/executor-report.ts`)
+are generated from [runnerq-spec](https://github.com/runnerq/runnerq-spec/tree/main/protocol/storage),
+so every call's arguments and result are checked against the protocol at compile time.
 
 `test/hosted.test.mjs` runs a whole workflow against a real data plane when
 `RUNNERQ_DATA_URL` (e.g. `http://localhost:8081`) and `RUNNERQ_DATA_ADMIN_TOKEN` are set;
