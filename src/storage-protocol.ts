@@ -121,6 +121,11 @@ export interface FailureKind {
 export interface RetentionPolicy {
   Completed: Duration;
   Failed: Duration;
+  /**
+   * How long events of finished activities are kept, apart from their tree; 0
+   * keeps them as long as the tree. Events of unfinished activities are kept.
+   */
+  Events: Duration;
 }
 
 export interface IdempotencyResult {
@@ -225,11 +230,6 @@ export interface YieldArgs {
   workerID: string;
   kind: string;
   step: string;
-}
-
-export interface ExtendLeaseArgs {
-  activityID: UUID;
-  extendBy: Duration;
 }
 
 export interface StoreResultArgs {
@@ -378,7 +378,6 @@ export interface Operations {
   ProcessScheduled: { args: ProcessScheduledArgs; result: number };
   RequeueExpired: { args: RequeueExpiredArgs; result: number };
   Yield: { args: YieldArgs; result: null };
-  ExtendLease: { args: ExtendLeaseArgs; result: boolean };
   StoreResult: { args: StoreResultArgs; result: null };
   WakeWaiting: { args: WakeWaitingArgs; result: boolean };
   SignalActivity: { args: SignalActivityArgs; result: null };
