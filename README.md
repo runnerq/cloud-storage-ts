@@ -19,6 +19,7 @@ const worker = new Worker({ storage, labels: { region: "eu-west-1" } });
 worker.register(activity("charge"), async (ctx, input) => ({
   charged: input.amount,
 }));
+worker.observe(storage); // report the worker to the data plane
 await worker.start();
 
 const client = new RunnerQClient({ storage });
@@ -30,9 +31,9 @@ sleeps, signals, idempotency keys, and native (`superjson-v1`) payloads and resu
 keep dates, maps, sets and bigints. A failure's details (name, stack, code, cause) are
 kept for whoever awaits it.
 
-- **Fleet:** a worker on this storage reports itself to RunnerQ Cloud every 10 seconds and
-  within about two seconds of a change, and says goodbye when it stops, so the console
-  shows it without a conductor agent.
+- **Fleet:** a worker that observes this storage (`worker.observe(storage)`) reports itself
+  to RunnerQ Cloud every 10 seconds and within about two seconds of a change, and says
+  goodbye when it stops, so the console shows it without a conductor agent.
 - **Managed maintenance:** don't set `retention` on the worker; set it on the store in the
   console. Lease recovery (`reap`) runs in the data plane.
 - **Safety:** the endpoint must be HTTPS (HTTP only on loopback). Redirects are never

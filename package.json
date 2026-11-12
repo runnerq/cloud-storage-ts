@@ -32,7 +32,7 @@
   "devDependencies": {
     "@types/node": "^22",
     "prettier": "^3.9.9",
-    "runnerq": "github:runnerq/runnerq-ts#0619323f62fa992b9b6f4ee4c88276715ebfc3c0",
+    "runnerq": "github:runnerq/runnerq-ts#38eb12e021d3a257527c06a9172b04df57d60e48",
     "typescript": "^5.9.3"
   }
 }
